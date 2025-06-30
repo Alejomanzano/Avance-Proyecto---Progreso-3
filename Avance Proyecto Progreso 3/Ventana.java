@@ -53,41 +53,12 @@ public class Ventana {
         registroUsuarios.registroinicial(us2);
         registroUsuarios.registroinicial(us3);
         registroUsuarios.registroinicial(us4);
-        registroFallas.setListaUsuarios(registroUsuarios.getListaUsuarios());
-        Fallas fallaElectrica1 = new Fallas("Corte de energía", "Magdalena", "170112",
-                "Interrupción del suministro eléctrico en el sector desde las 14:00", "Pendiente",
-                "Pedro.velastegui@udla.edu.ec", "Derick.tipan@udla.edu.ec");
 
-        Fallas fallaElectrica2 = new Fallas("Cableado peligroso", "Centro Histórico", "170215",
-                "Cables de alta tensión expuestos en poste, riesgo de electrocución", "Pendiente",
-                "ainhoa.salas@udla.edu.ec", "kim.ramos@udla.edu.ec");
-
-        Fallas fallaElectrica3 = new Fallas("Medidor dañado", "Ponceano", "170318",
-                "Medidor de energía con display no funcional en cliente ", "Pendiente",
-                "ainhoa.salas@udla.edu.ec", "Derick.tipan@udla.edu.ec");
-        registroFallas.getColaFallas().add(fallaElectrica1);
-        registroFallas.getColaFallas().add(fallaElectrica2);
-        registroFallas.getColaFallas().add(fallaElectrica3);
-
-        for (Usuarios u : registroUsuarios.getListaUsuarios()) {
-            String correo = u.getCorreo().toLowerCase();
-            if (correo.equals("pedro.velastegui@udla.edu.ec")) {
-                u.incrementarFallas();
-            } else if (correo.equals("ainhoa.salas@udla.edu.ec")) {
-                u.incrementarFallas();
-                u.incrementarFallas();
-            }
-        }
         ButtonGroup estadoGroup = new ButtonGroup();
         estadoGroup.add(ButtonAActivo);
         estadoGroup.add(ButtonPendiente);
         estadoGroup.add(ButtonFinalizado);
         ButtonPendiente.setSelected(true);
-        ButtonGroup estadisticasGroup = new ButtonGroup();
-        estadisticasGroup.add(BtaActivoEstadistica);
-        estadisticasGroup.add(BtaPendienteEstadistica);
-        estadisticasGroup.add(BtaFinalizadoEstadistica);
-        registroMantenimientos = new RegistroMantenimientos(registroUsuarios.getListaUsuarios());
 
         BtnAgg.addActionListener(new ActionListener() {
             @Override
@@ -221,14 +192,16 @@ public class Ventana {
         btnMostrarFallasRegistradas.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                // Obtener parámetros de filtrado
+                String cedula = txtCedulaFallasRegistradas.getText().trim();
+
+                // Obtener parámetros de filtrado (puedes agregar más si necesitas)
                 String parroquia = (String) cboBarriosEstadistica.getSelectedItem();
                 String codigoPostal = txtEstadisticaCP.getText().trim();
 
-                // Determinar qué estados están seleccionados
-                boolean mostrarActivos = BtaActivoEstadistica.isSelected();
-                boolean mostrarPendientes = BtaPendienteEstadistica.isSelected();
-                boolean mostrarFinalizados = BtaFinalizadoEstadistica.isSelected();
+                // Determinar estados seleccionados
+                boolean mostrarActivos = ButtonAActivo.isSelected();
+                boolean mostrarPendientes = ButtonPendiente.isSelected();
+                boolean mostrarFinalizados = ButtonFinalizado.isSelected();
 
                 // Si no hay ningún estado seleccionado, mostrar todos por defecto
                 if (!mostrarActivos && !mostrarPendientes && !mostrarFinalizados) {
@@ -237,10 +210,29 @@ public class Ventana {
                     mostrarFinalizados = true;
                 }
 
-                // Filtrar las fallas
                 StringBuilder resultado = new StringBuilder();
 
+                // Obtener correo del usuario si se especificó cédula
+                String correoUsuario = "";
+                if (!cedula.isEmpty()) {
+                    for (Usuarios u : registroUsuarios.getListaUsuarios()) {
+                        if (u.getCedula().equals(cedula)) {
+                            correoUsuario = u.getCorreo();
+                            break;
+                        }
+                    }
+                    if (correoUsuario.isEmpty()) {
+                        txtFallasRegistradas.setText("No se encontró usuario con cédula: " + cedula);
+                        return;
+                    }
+                }
+
                 for (Fallas f : registroFallas.getColaFallas()) {
+                    // Filtrar por cédula si se especificó
+                    if (!cedula.isEmpty() && !f.getUsuarioReporte().equalsIgnoreCase(correoUsuario)) {
+                        continue;
+                    }
+
                     // Filtrar por parroquia si se seleccionó una
                     if (!"Seleccione una parroquia".equals(parroquia)) {
                         if (!f.getParroquia().equalsIgnoreCase(parroquia)) {
@@ -263,15 +255,23 @@ public class Ventana {
                         continue;
                     }
 
-                    // Agregar al resultado
-                    resultado.append(f.toString()).append("\n");
+                    // Agregar al resultado con el formato deseado
+                    resultado.append("Tipo: ").append(f.getTipo()).append("\n")
+                            .append("Ubicación: ").append(f.getParroquia())
+                            .append(" (CP: ").append(f.getCodigoPostal()).append(")\n")
+                            .append("Descripción: ").append(f.getDescripcion()).append("\n")
+                            .append("Estado: ").append(f.getEstado()).append("\n")
+                            .append("Reportado por: ").append(f.getUsuarioReporte()).append("\n")
+                            .append("Técnico asignado: ").append(f.getTecnicoAsignado()).append("\n\n");
                 }
 
-                // Mostrar resultados en el área de texto
+                // Mostrar resultados
                 if (resultado.length() == 0) {
-                    txtEstadistica.setText("No se encontraron fallas con los criterios seleccionados");
+                    txtFallasRegistradas.setText(cedula.isEmpty() ?
+                            "No se encontraron fallas con los criterios seleccionados" :
+                            "No hay fallas registradas para este usuario con los filtros aplicados");
                 } else {
-                    txtEstadistica.setText(resultado.toString());
+                    txtFallasRegistradas.setText(resultado.toString());
                 }
             }
 
@@ -302,11 +302,34 @@ public class Ventana {
                     return;
                 }
 
-                boolean exito = registroFallas.asignarTecnicoAFalla(cedula, correoTecnico);
-                if (exito) {
+                // Obtener el correo del usuario asociado a la cédula
+                String correoUsuario = "";
+                for (Usuarios u : registroUsuarios.getListaUsuarios()) {
+                    if (u.getCedula().equals(cedula)) {
+                        correoUsuario = u.getCorreo();
+                        break;
+                    }
+                }
+
+                if (correoUsuario.isEmpty()) {
+                    JOptionPane.showMessageDialog(null, "No se encontró usuario con esa cédula");
+                    return;
+                }
+
+                // Buscar y actualizar todas las fallas del usuario
+                boolean asignado = false;
+                for (Fallas f : registroFallas.getColaFallas()) {
+                    if (f.getUsuarioReporte().equalsIgnoreCase(correoUsuario)) {
+                        f.setTecnicoAsignado(correoTecnico);
+                        asignado = true;
+                    }
+                }
+
+                if (asignado) {
                     JOptionPane.showMessageDialog(null, "Técnico asignado/actualizado correctamente");
-                    btnMostrarFallasRegistradas.doClick(); // Actualizar vista
-                    txtPonerACargo.setText(""); // Limpiar campo después de asignar
+                    // Actualizar la vista
+                    btnMostrarFallasRegistradas.doClick();
+                    txtPonerACargo.setText(""); // Limpiar campo
                 } else {
                     JOptionPane.showMessageDialog(null, "No se encontraron fallas para este usuario");
                 }
@@ -318,7 +341,7 @@ public class Ventana {
                 String cedula = txtCedulaFallasRegistradas.getText().trim();
                 if (cedula.isEmpty()) {
                     JOptionPane.showMessageDialog(null, "Ingrese una cédula primero");
-                    ButtonPendiente.setSelected(true); // Revierte la selección
+                    ButtonPendiente.setSelected(true);
                     return;
                 }
 
@@ -328,7 +351,7 @@ public class Ventana {
                     btnMostrarFallasRegistradas.doClick();
                 } else {
                     JOptionPane.showMessageDialog(null, "No se pudo cambiar el estado");
-                    ButtonPendiente.setSelected(true); // Revierte la selección
+                    ButtonPendiente.setSelected(true);
                 }
             }
         });
@@ -347,7 +370,7 @@ public class Ventana {
                     btnMostrarFallasRegistradas.doClick();
                 } else {
                     JOptionPane.showMessageDialog(null, "No se pudo cambiar el estado");
-                    ButtonAActivo.setSelected(true); // Revierte la selección
+                    ButtonAActivo.setSelected(true);
                 }
             }
         });
@@ -359,13 +382,13 @@ public class Ventana {
                     JOptionPane.showMessageDialog(null, "Ingrese una cédula primero");
                     return;
                 }
+
                 boolean exito = registroFallas.cambiarEstadoFalla(cedula, "Finalizado");
                 if (exito) {
                     JOptionPane.showMessageDialog(null, "Estado cambiado a Finalizado");
                     btnMostrarFallasRegistradas.doClick();
                 } else {
                     JOptionPane.showMessageDialog(null, "No se pudo cambiar el estado");
-
                     ButtonPendiente.setSelected(true);
                 }
             }
