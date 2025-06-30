@@ -134,7 +134,13 @@ public class RegistroFallas {
 
     public boolean cambiarEstadoFalla(String cedulaUsuario, String nuevoEstado) {
         // Primero obtenemos el correo del usuario a partir de la cédula
-        String correoUsuario = obtenerCorreoPorCedula(cedulaUsuario);
+        String correoUsuario = "";
+        for (Usuarios u : listaUsuarios) {
+            if (u.getCedula().equals(cedulaUsuario)) {
+                correoUsuario = u.getCorreo();
+                break;
+            }
+        }
 
         if (correoUsuario.isEmpty()) {
             return false; // No se encontró el usuario
